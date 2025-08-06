@@ -1,4 +1,5 @@
 import PostModel from "../models/Post.js";
+import UserModel from "../models/User.js";
 
 export const createPost = async (req, res) => {
   try {
@@ -9,11 +10,21 @@ export const createPost = async (req, res) => {
       imageUrl: req.body.imageUrl,
       user: req.userId,
     });
+
     const post = await doc.save();
-    res.json(post);
+
+    // Наполняем данные пользователя
+    const populatedPost = await PostModel.findById(post._id)
+      .populate({
+        path: "user",
+        select: "fullName avatarUrl", // Выбираем только нужные поля
+      })
+      .exec();
+
+    res.json(populatedPost);
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "не удалось создать статью" });
+    res.status(500).json({ message: "Не удалось создать статью" });
   }
 };
 
@@ -25,7 +36,7 @@ export const getOnePost = async (req, res) => {
       { _id: postId },
       { $inc: { viewsCount: 1 } },
       { new: true }
-    );
+    ).populate("user");
 
     if (!updatedPost) {
       return res.status(404).json({ message: "Статья не найдена" });
@@ -40,30 +51,48 @@ export const getOnePost = async (req, res) => {
     });
   }
 };
-export const addfavouritePost = async (req, res) => {
+export const toggleLike = async (req, res) => {
   try {
     const postId = req.params.id;
-    const updatedPost = await PostModel.findOneAndUpdate(
-      { _id: postId },
-      { $inc: { likeCount: 1 } },
-      { new: true }
-    );
+    const userId = req.userId;
+    // 1. Находим пост и пользователя
+    const [post, user] = await Promise.all([
+      PostModel.findById(postId),
+      UserModel.findById(userId),
+    ]);
 
-    if (!updatedPost) {
-      res.status(404).json({ message: "не найдено" });
+    if (!post || !user) {
+      return res
+        .status(404)
+        .json({ message: "Пост или пользователь не найден" });
     }
-    res.json(updatePost);
+
+    // 2. Проверяем, лайкал ли пользователь пост
+    const isLiked = user.likedPosts.includes(postId);
+
+    // 3. Обновляем данные
+    if (isLiked && post.likeCount > 0) {
+      // Удаляем лайк
+      await Promise.all([
+        PostModel.updateOne({ _id: postId }, { $inc: { likeCount: -1 } }),
+        UserModel.updateOne({ _id: userId }, { $pull: { likedPosts: postId } }),
+      ]);
+    } else {
+      // Добавляем лайк
+      await Promise.all([
+        PostModel.updateOne({ _id: postId }, { $inc: { likeCount: 1 } }),
+        UserModel.updateOne({ _id: userId }, { $push: { likedPosts: postId } }),
+      ]);
+    }
+
+    // 4. Возвращаем обновлённые данные
+    const updatedPost = await PostModel.findById(postId);
+    res.json({
+      post: updatedPost,
+      isLiked: !isLiked,
+    });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "произошла ошибка лайкнуого поста" });
-  }
-};
-
-export const updatedPostLike = async (req, res) => {
-  const postId = req.params.id;
-
-  const love = await PostModel.findOneAndUpdate({ _id: postId });
-  if (love) {
+    res.status(500).json({ message: "Ошибка при обработке лайка", error });
   }
 };
 
@@ -76,14 +105,33 @@ export const getAllPosts = async (req, res) => {
     res.status(500).json({ message: "ошибка получения всех постов" });
   }
 };
-
+export const getAllLikedPostUser = async (req, res) => {
+  try {
+    const user = await UserModel.findById(req.userId);
+    const { likedPosts } = user;
+    const posts = await PostModel.find().populate("user").exec();
+    const items = posts.filter(({ _id }) => likedPosts.includes(_id));
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+    res.json({ items });
+  } catch (error) {
+    console.log("error:", error);
+  }
+};
 export const deletePost = async (req, res) => {
   try {
-    const doc = await PostModel.findOneAndDelete({ _id: req.params.id });
+    const postId = req.params.id;
+    const userId = req.userId;
 
-    if (!doc) {
-      return res.status(404).json({ message: "Статья не найдена" });
-    }
+    // Удаляем пост и чистим лайки параллельно
+    await Promise.all([
+      PostModel.findOneAndDelete({ _id: postId, user: userId }), // Удаляем только посты автора
+      UserModel.updateMany(
+        { likedPosts: postId },
+        { $pull: { likedPosts: postId } }
+      ),
+    ]);
 
     res.json({ success: true });
   } catch (err) {

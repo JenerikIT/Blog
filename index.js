@@ -8,17 +8,17 @@ import {
 import checkAuth from "./utils/checkAuth.js";
 import { getMe, login, register } from "./controllers/UserController.js";
 import {
-  addfavouritePost,
   createPost,
   deletePost,
+  getAllLikedPostUser,
   getAllPosts,
   getOnePost,
+  toggleLike,
   updatePost,
 } from "./controllers/PostController.js";
 import multer from "multer";
 import handleValidationsErrors from "./utils/handleValidationsErrors.js";
 import cors from "cors";
-import { toggleFavorite } from "./controllers/FavouritesController.js";
 mongoose
   .connect(
     "mongodb+srv://ahmarediculs:nara198019801980@cluster0.tefwgbd.mongodb.net/blog?retryWrites=true&w=majority&appName=Cluster0"
@@ -46,7 +46,14 @@ const app = express();
 app.get("/", (req, res) => {
   res.send("hello");
 });
+
+// route validate
+app.get("/validate", checkAuth, (req, res) => {
+  res.json({ valid: true, user: req.user });
+});
+
 app.use(cors()); // чтобы избежать ошибку cors
+
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 // route авторизации и регистрации
@@ -65,6 +72,7 @@ app.post(
 
 app.get("/posts", getAllPosts);
 app.get("/posts/:id", getOnePost);
+app.get("/posts/all/liked", checkAuth, getAllLikedPostUser);
 
 app.patch(
   "/posts/:id",
@@ -73,7 +81,8 @@ app.patch(
   handleValidationsErrors,
   updatePost
 );
-// app.patch("/posts/liked/:id", checkAuth, toggleFavorite);
+app.patch("/posts/liked/:id", checkAuth, toggleLike);
+
 app.delete("/posts/:id", checkAuth, deletePost);
 app.post(
   "/posts",
@@ -87,7 +96,12 @@ app.post(
 
 app.post("/upload", checkAuth, upload.single("image"), (req, res) => {
   res.json({
-    url: `/uplods/${req.file.originalname}`,
+    url: `/uploads/${req.file.originalname}`,
+  });
+});
+app.post("/upload/user", upload.single("image"), (req, res) => {
+  res.json({
+    url: `/uploads/${req.file.originalname}`,
   });
 });
 app.listen(4444, (err) => {

@@ -1,4 +1,5 @@
 import { body } from "express-validator";
+import validator from "validator";
 
 export const loginValidation = [
   body("email", "неверный формат почты").isEmail(),
@@ -8,12 +9,13 @@ export const loginValidation = [
 ];
 
 export const registerValidation = [
-  body("email", "неверный формат почты").isEmail(),
-  body("password", "пароль должен быть минимум 5 символов").isLength({
+  body("email", "Неверный формат почты").isEmail(),
+  body("password", "Пароль должен быть минимум 5 символов").isLength({
     min: 5,
   }),
-  body("fullName", "имя должно быть минимум 3 символа").isLength({ min: 3 }),
-  body("avatarUrl", "аватарка должна быть ссылкой").optional().isURL(),
+  body("fullName", "Имя должно быть минимум 3 символа").isLength({ min: 4 }),
+  body("avatarUrl", "Некорректный URL аватарки").optional().isString(),
+  body("phone", "Некорректный номер").isLength({ min: 8 }),
 ];
 
 export const postCreateValidation = [

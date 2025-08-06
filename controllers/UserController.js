@@ -7,6 +7,7 @@ export const register = async (req, res) => {
     const salt = await bcrypt.genSalt(6);
     const hash = await bcrypt.hash(password, salt);
     const doc = new UserModel({
+      phone: req.body.phone,
       email: req.body.email,
       fullName: req.body.fullName,
       avatarUrl: req.body.avatarUrl,
@@ -35,32 +36,33 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const userFind = await UserModel.findOne({ email: req.body.email });
-    if (!userFind) {
-      return res.status(400).json({ message: "пользователь не найден" });
-    }
-    const isValidPass = bcrypt.compare(
-      req.body.password,
-      userFind._doc.passwordHash
+    const user = await UserModel.findOne({ email: req.body.email }).select(
+      "+passwordHash"
     );
-    if (!isValidPass) {
-      return res.status(404).json({ message: "неверный логин или пароль" });
+
+    if (!user) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
+    }
+    const isPasswordValid = await bcrypt.compare(
+      req.body.password,
+      user.passwordHash
+    );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: "Неверный email или пароль" });
     }
 
     const token = jwt.sign(
-      {
-        _id: userFind._id,
-      },
-      "secret123",
-      {
-        expiresIn: "30d",
-      }
+      { _id: user._id },
+      process.env.JWT_SECRET || "secret123",
+      { expiresIn: "30d" }
     );
-    const { passwordHash, ...userData } = userFind._doc;
+
+    const { passwordHash, ...userData } = user._doc;
     res.json({ ...userData, token });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "не удалось авторизоваться" });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 
@@ -71,9 +73,9 @@ export const getMe = async (req, res) => {
       res.status(404).json({ message: "пользователь не найден" });
     }
     const { passwordHash, ...userData } = user._doc;
-    res.json({ userData });
+    res.json({ userData, state: true });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "нет доступа" });
+    res.status(500).json({ message: "нет доступа", state: false });
   }
 };

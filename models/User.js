@@ -16,11 +16,14 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    favorites: [
+    phone: {
+      type: String,
+      required: true,
+    },
+    likedPosts: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Post",
-        default: [],
       },
     ],
   },
